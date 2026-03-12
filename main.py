@@ -20,7 +20,12 @@ MONGO_URI = os.getenv('MONGO_URI')
 
 # เชื่อมต่อ Database
 if MONGO_URI:
-    db_client = AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
+    db_client = AsyncIOMotorClient(
+        MONGO_URI, 
+        tls=True, 
+        tlsCAFile=certifi.where(), 
+        tlsAllowInvalidCertificates=True
+    )
     db = db_client['MyScheduleBotDB']
     
     # สร้าง Collection แทนไฟล์ JSON เดิม
