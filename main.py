@@ -5,6 +5,7 @@ import pytz
 import os
 import aiohttp
 import random
+import certifi
 from dotenv import load_dotenv
 
 # นำเข้าเครื่องมือสำหรับเชื่อมต่อ MongoDB (แบบ Async)
@@ -19,7 +20,7 @@ MONGO_URI = os.getenv('MONGO_URI')
 
 # เชื่อมต่อ Database
 if MONGO_URI:
-    db_client = AsyncIOMotorClient(MONGO_URI)
+    db_client = AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
     db = db_client['MyScheduleBotDB']
     
     # สร้าง Collection แทนไฟล์ JSON เดิม
