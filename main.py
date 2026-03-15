@@ -233,13 +233,25 @@ async def hw_add(interaction: discord.Interaction, subject: str, task: str, due_
     msg = f"✅ **บันทึกการบ้านเรียบร้อย!**\n📚 **วิชา:** {subject}\n📝 **งาน:** {task}\n📅 **ส่ง:** {due_date}\n*(รหัสงาน: {new_id})*"
     await interaction.response.send_message(msg)
 
-@bot.tree.command(name="hw_list", description="Show all pending homework")
-async def hw_list(interaction: discord.Interaction):
-    cursor = hw_collection.find().sort("id", 1)
+@bot.tree.command(name="hw_list", description="Show pending homework (with optional filters)")
+async def hw_list(interaction: discord.Interaction, due_date: str = None, subject: str = None):
+    # Build query dictionary for MongoDB
+    query = {}
+    if due_date:
+        query["due_date"] = due_date
+    if subject:
+        # Use regex for partial matching (e.g., searching "OS" will find "Operating System (OS)")
+        query["subject"] = {"$regex": subject, "$options": "i"}
+
+    cursor = hw_collection.find(query).sort("id", 1)
     tasks = await cursor.to_list(length=100)
 
     if not tasks:
-        await interaction.response.send_message("🎉 **ไม่มีการบ้านค้างเลย!** ไปเล่นเกม ดูกันพลาได้สบายใจ!")
+        msg = "🎉 **ไม่มีการบ้านค้างเลย!** ไปเล่นเกม ดูกันพลาได้สบายใจ!"
+        # Custom message if filters are applied but nothing is found
+        if due_date or subject:
+            msg = "🔍 **ไม่พบการบ้านที่ตรงกับเงื่อนไข (Filter) ที่ค้นหาครับ**"
+        await interaction.response.send_message(msg)
         return
 
     msg = "📋 **รายการการบ้านที่ต้องทำ:**\n"
@@ -361,16 +373,29 @@ async def reminder_add(interaction: discord.Interaction, name: str, start_date: 
            f"🔴 **สิ้นสุด:** {end_date} เวลา {end_time} น.")
     await interaction.response.send_message(msg)
 
-@bot.tree.command(name="reminder_list", description="Show all active reminders and events")
-async def reminder_list(interaction: discord.Interaction):
-    cursor = reminder_collection.find().sort("id", 1)
+@bot.tree.command(name="reminder_list", description="Show active reminders (with optional filter by date)")
+async def reminder_list(interaction: discord.Interaction, target_date: str = None):
+    # Build query dictionary for MongoDB
+    query = {}
+    if target_date:
+        # Search for events starting on the specific date
+        query["start_date"] = target_date
+
+    cursor = reminder_collection.find(query).sort("id", 1)
     reminders = await cursor.to_list(length=100)
 
     if not reminders:
-        await interaction.response.send_message("✨ **ไม่มีกิจกรรมหรือการแจ้งเตือนค้างอยู่ครับ!**")
+        msg = "✨ **ไม่มีกิจกรรมหรือการแจ้งเตือนค้างอยู่ครับ!**"
+        # Custom message if filter is applied but nothing is found
+        if target_date:
+            msg = f"🔍 **ไม่พบกิจกรรมในวันที่ {target_date} ครับ**"
+        await interaction.response.send_message(msg)
         return
 
     msg = "📅 **รายการแจ้งเตือน / กิจกรรมทั้งหมด:**\n"
+    if target_date:
+        msg = f"📅 **รายการกิจกรรมสำหรับวันที่ {target_date}:**\n"
+
     for rmd in reminders:
         s_time = rmd.get("start_time", "08:00")
         e_time = rmd.get("end_time", "08:00")
