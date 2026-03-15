@@ -303,19 +303,42 @@ async def hw_list(interaction: discord.Interaction, due_date: str = None, subjec
         msg += f"🔹 **[ID: {task['id']}]** วิชา {task['subject']} | 📝 {task['task']} | 📅 ส่ง: {task['due_date']}\n"
     await interaction.response.send_message(msg)
 
-@bot.tree.command(name="hw_done", description="Mark homework as done and remove it")
-async def hw_done(interaction: discord.Interaction, task_id: int):
-    # ค้นหางานที่ต้องการจะลบก่อน เพื่อเอาชื่อวิชามาแสดงโชว์
-    task_to_delete = await hw_collection.find_one({"id": task_id})
-    
-    if not task_to_delete:
-        await interaction.response.send_message(f"❌ **หาไม่เจอ!** ไม่มีงานรหัส {task_id} ในสมุดจดครับ")
+@bot.tree.command(name="hw_done",
+                  description="Mark homework as done and remove it (Supports multiple IDs e.g. 5, 6, 7)")
+async def hw_done(interaction: discord.Interaction, task_ids: str):
+    # 🟢 แปลงข้อความให้กลายเป็น List ของตัวเลข (รองรับทั้งการพิมพ์ , และพิมพ์เว้นวรรค)
+    try:
+        # replace(',', ' ') จะเปลี่ยนลูกน้ำเป็นช่องว่าง แล้ว split() จะตัดคำแยกเป็นก้อนๆ
+        id_list = [int(x) for x in task_ids.replace(',', ' ').split() if x.isdigit()]
+    except Exception:
+        await interaction.response.send_message("❌ **รูปแบบ ID ผิดพลาด!** กรุณาพิมพ์เป็นตัวเลข เช่น 5, 6, 7")
         return
 
-    # สั่งลบออกจาก Database
-    await hw_collection.delete_one({"id": task_id})
-    await interaction.response.send_message(
-        f"✅ **เย้! ลบงานรหัส {task_id} เรียบร้อย!**\n(ลบวิชา {task_to_delete['subject']} ออกจากสมุดจดแล้ว!)")
+    if not id_list:
+        await interaction.response.send_message("❌ **ไม่พบรหัสงาน!** กรุณาระบุรหัสงานที่ต้องการลบครับ")
+        return
+
+    # ค้นหางานทั้งหมดที่ตรงกับ ID ใน List (ใช้คำสั่ง $in ของ MongoDB)
+    cursor = hw_collection.find({"id": {"$in": id_list}})
+    tasks_to_delete = await cursor.to_list(length=100)
+
+    if not tasks_to_delete:
+        await interaction.response.send_message(
+            f"❌ **หาไม่เจอ!** ไม่มีงานรหัส {', '.join(map(str, id_list))} ในสมุดจดครับ")
+        return
+
+    # ดึง ID ที่มีอยู่จริงในระบบมาเพื่อทำการลบ
+    valid_ids = [task['id'] for task in tasks_to_delete]
+
+    # สั่งลบออกจาก Database ทีเดียวทั้งหมด (Bulk Delete)
+    await hw_collection.delete_many({"id": {"$in": valid_ids}})
+
+    # สร้างข้อความสรุปว่าลบอะไรไปบ้าง
+    msg = f"✅ **เย้! เคลียร์งานเรียบร้อย ({len(valid_ids)} รายการ):**\n"
+    for task in tasks_to_delete:
+        msg += f"🔹 [ID: {task['id']}] ลบวิชา {task['subject']} ออกจากสมุดจดแล้ว!\n"
+
+    await interaction.response.send_message(msg)
 
 @bot.tree.command(name="hw_edit", description="Edit an existing homework task by ID")
 async def hw_edit(interaction: discord.Interaction, task_id: int, subject: str = None, task: str = None, due_date: str = None):
@@ -491,16 +514,40 @@ async def reminder_list(interaction: discord.Interaction, target_date: str = Non
         msg += f"🔹 **[ID: {rmd['id']}]** {rmd['name']} | เริ่ม: {rmd['start_date']} ({s_time}) | สิ้นสุด: {rmd['end_date']} ({e_time})\n"
     await interaction.response.send_message(msg)
 
-@bot.tree.command(name="reminder_del", description="Delete a reminder by ID")
-async def reminder_del(interaction: discord.Interaction, rmd_id: int):
-    target_rmd = await reminder_collection.find_one({"id": rmd_id})
-    
-    if not target_rmd:
-        await interaction.response.send_message(f"❌ **หาไม่เจอ!** ไม่มีกิจกรรมรหัส {rmd_id} ในระบบครับ")
+txt = ""
+
+@bot.tree.command(name="reminder_del", description="Delete reminders by ID (Supports multiple IDs e.g. 5, 6, 7)")
+async def reminder_del(interaction: discord.Interaction, rmd_ids: str):
+    # 🟢 แปลงข้อความให้กลายเป็น List ของตัวเลขเหมือนกัน
+    try:
+        id_list = [int(x) for x in rmd_ids.replace(',', ' ').split() if x.isdigit()]
+    except Exception:
+        await interaction.response.send_message("❌ **รูปแบบ ID ผิดพลาด!** กรุณาพิมพ์เป็นตัวเลข เช่น 5, 6, 7")
         return
 
-    await reminder_collection.delete_one({"id": rmd_id})
-    await interaction.response.send_message(f"🗑️ **ลบกิจกรรมรหัส {rmd_id} เรียบร้อย!**\n(ลบ '{target_rmd['name']}' ออกจากระบบแล้ว)")
+    if not id_list:
+        await interaction.response.send_message("❌ **ไม่พบรหัสกิจกรรม!** กรุณาระบุรหัสที่ต้องการลบครับ")
+        return
+
+    # ค้นหากิจกรรมทั้งหมดที่ตรงกับ ID
+    cursor = reminder_collection.find({"id": {"$in": id_list}})
+    rmds_to_delete = await cursor.to_list(length=100)
+
+    if not rmds_to_delete:
+        await interaction.response.send_message(
+            f"❌ **หาไม่เจอ!** ไม่มีกิจกรรมรหัส {', '.join(map(str, id_list))} ในระบบครับ")
+        return
+
+    valid_ids = [rmd['id'] for rmd in rmds_to_delete]
+
+    # สั่งลบ Bulk Delete
+    await reminder_collection.delete_many({"id": {"$in": valid_ids}})
+
+    msg = f"🗑️ **ลบกิจกรรมเรียบร้อย ({len(valid_ids)} รายการ):**\n"
+    for rmd in rmds_to_delete:
+        msg += f"🔹 [ID: {rmd['id']}] ลบกิจกรรม '{rmd['name']}' ออกจากระบบแล้ว\n"
+
+    await interaction.response.send_message(msg)
 
 @bot.tree.command(name="reminder_edit", description="Edit an existing reminder by ID")
 async def reminder_edit(interaction: discord.Interaction, rmd_id: int, name: str = None, start_date: str = None, end_date: str = None, start_time: str = None, end_time: str = None):
