@@ -223,10 +223,28 @@ async def myweek(interaction: discord.Interaction):
 # ==========================================
 @bot.tree.command(name="hw_add", description="Add a new homework or project task")
 async def hw_add(interaction: discord.Interaction, subject: str, task: str, due_date: str = "รอกำหนด (TBD) ⏳"):
+    # 🟢 ระบบแปลงวันที่อัตโนมัติ (รองรับทั้ง พ.ศ. และ ค.ศ.)
+    if due_date != "รอกำหนด (TBD) ⏳":
+        try:
+            parts = due_date.split('/')
+            if len(parts) == 3:
+                day = int(parts[0])
+                month = int(parts[1])
+                year = int(parts[2])
+
+                # ถ้าพิมพ์มาเป็น ค.ศ. (เลขน้อยกว่า 2500) ให้แปลงเป็น พ.ศ.
+                if year < 2500:
+                    year += 543
+
+                # จัดฟอร์แมตให้มีเลข 0 นำหน้าเสมอ เช่น 1/3/2569 -> 01/03/2569
+                due_date = f"{day:02d}/{month:02d}/{year}"
+        except Exception:
+            pass
+
     new_id = await get_next_id(hw_collection)
 
     new_hw = {"id": new_id, "subject": subject, "task": task, "due_date": due_date}
-    
+
     # บันทึกลง Database
     await hw_collection.insert_one(new_hw)
 
@@ -238,9 +256,28 @@ async def hw_list(interaction: discord.Interaction, due_date: str = None, subjec
     # Build query dictionary for MongoDB
     query = {}
     if due_date:
+        # 🟢 แปลงฟอร์แมตวันที่ให้มีเลข 0 นำหน้าเสมอ เหมือนกันกับฝั่ง reminder
+        try:
+            # parts = due_date.split('/')
+            # if len(parts) == 3:
+            #     due_date = f"{int(parts[0]):02d}/{int(parts[1]):02d}/{parts[2]}"
+            parts = due_date.split('/')
+            if len(parts) == 3:
+                day = int(parts[0])
+                month = int(parts[1])
+                year = int(parts[2])
+
+                # ถ้าเป็น ค.ศ. (เลขน้อยกว่า 2500) ให้บวก 543 ทันที
+                if year < 2500:
+                    year += 543
+
+                due_date = f"{day:02d}/{month:02d}/{year}"
+        except Exception:
+            pass
         query["due_date"] = due_date
+
     if subject:
-        # Use regex for partial matching (e.g., searching "OS" will find "Operating System (OS)")
+        # Use regex for partial matching
         query["subject"] = {"$regex": subject, "$options": "i"}
 
     cursor = hw_collection.find(query).sort("id", 1)
@@ -248,7 +285,6 @@ async def hw_list(interaction: discord.Interaction, due_date: str = None, subjec
 
     if not tasks:
         msg = "🎉 **ไม่มีการบ้านค้างเลย!** ไปเล่นเกม ดูกันพลาได้สบายใจ!"
-        # Custom message if filters are applied but nothing is found
         if due_date or subject:
             msg = "🔍 **ไม่พบการบ้านที่ตรงกับเงื่อนไข (Filter) ที่ค้นหาครับ**"
         await interaction.response.send_message(msg)
@@ -353,7 +389,28 @@ async def skip_reset(interaction: discord.Interaction, subject: str):
 @bot.tree.command(name="reminder_add", description="Add an event (Date: DD/MM/YYYY, Time: HH:MM)")
 async def reminder_add(interaction: discord.Interaction, name: str, start_date: str, end_date: str,
                        start_time: str = "08:00", end_time: str = "08:00"):
-    if parse_datetime_support_be(start_date, start_time) is None or parse_datetime_support_be(end_date, end_time) is None:
+    # 🟢 ระบบแปลงวันที่ start_date (รองรับทั้ง พ.ศ. และ ค.ศ.)
+    try:
+        parts = start_date.split('/')
+        if len(parts) == 3:
+            day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+            if year < 2500: year += 543
+            start_date = f"{day:02d}/{month:02d}/{year}"
+    except Exception:
+        pass
+
+    # 🟢 ระบบแปลงวันที่ end_date (รองรับทั้ง พ.ศ. และ ค.ศ.)
+    try:
+        parts = end_date.split('/')
+        if len(parts) == 3:
+            day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+            if year < 2500: year += 543
+            end_date = f"{day:02d}/{month:02d}/{year}"
+    except Exception:
+        pass
+
+    if parse_datetime_support_be(start_date, start_time) is None or parse_datetime_support_be(end_date,
+                                                                                              end_time) is None:
         await interaction.response.send_message(
             "❌ **รูปแบบผิดพลาด!**\nวันที่ต้องเป็น วัน/เดือน/ปี\nเวลาต้องเป็น ชั่วโมง:นาที (เช่น 09:30)")
         return
@@ -365,7 +422,7 @@ async def reminder_add(interaction: discord.Interaction, name: str, start_date: 
         "start_date": start_date, "end_date": end_date,
         "start_time": start_time, "end_time": end_time
     }
-    
+
     await reminder_collection.insert_one(new_rmd)
 
     msg = (f"✅ **สร้างการแจ้งเตือนเรียบร้อย!**\n📌 **กิจกรรม:** {name}\n"
@@ -378,7 +435,26 @@ async def reminder_list(interaction: discord.Interaction, target_date: str = Non
     # Build query dictionary for MongoDB
     query = {}
     if target_date:
-        # Search for events starting on the specific date
+        # 🟢 แปลงฟอร์แมตวันที่ให้มีเลข 0 นำหน้าเสมอ (Data Normalization)
+        # ตัวอย่าง: แปลง 16/3/2569 หรือ 1/1/2569 ให้กลายเป็น 16/03/2569 และ 01/01/2569 อัตโนมัติ
+        try:
+            # parts = target_date.split('/')
+            # if len(parts) == 3:
+            #     # {int(parts[0]):02d} คือการบังคับให้เลขมี 2 หลัก ถ้าเป็น 3 จะกลายเป็น 03
+            #     target_date = f"{int(parts[0]):02d}/{int(parts[1]):02d}/{parts[2]}"
+            parts = target_date.split('/')
+            if len(parts) == 3:
+                day = int(parts[0])
+                month = int(parts[1])
+                year = int(parts[2])
+
+                # ถ้าเป็น ค.ศ. (เลขน้อยกว่า 2500) ให้บวก 543 ทันที
+                if year < 2500:
+                    year += 543
+
+                target_date = f"{day:02d}/{month:02d}/{year}"
+        except Exception:
+            pass
         query["start_date"] = target_date
 
     cursor = reminder_collection.find(query).sort("id", 1)
@@ -386,7 +462,6 @@ async def reminder_list(interaction: discord.Interaction, target_date: str = Non
 
     if not reminders:
         msg = "✨ **ไม่มีกิจกรรมหรือการแจ้งเตือนค้างอยู่ครับ!**"
-        # Custom message if filter is applied but nothing is found
         if target_date:
             msg = f"🔍 **ไม่พบกิจกรรมในวันที่ {target_date} ครับ**"
         await interaction.response.send_message(msg)
