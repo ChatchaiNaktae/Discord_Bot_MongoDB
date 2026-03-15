@@ -255,29 +255,37 @@ async def hw_add(interaction: discord.Interaction, subject: str, task: str, due_
 async def hw_list(interaction: discord.Interaction, due_date: str = None, subject: str = None):
     # Build query dictionary for MongoDB
     query = {}
+
     if due_date:
-        # 🟢 แปลงฟอร์แมตวันที่ให้มีเลข 0 นำหน้าเสมอ เหมือนกันกับฝั่ง reminder
+        # 🟢 Flexible date parser (Supports Year, Month/Year, or Day/Month/Year)
         try:
-            # parts = due_date.split('/')
-            # if len(parts) == 3:
-            #     due_date = f"{int(parts[0]):02d}/{int(parts[1]):02d}/{parts[2]}"
             parts = due_date.split('/')
-            if len(parts) == 3:
-                day = int(parts[0])
-                month = int(parts[1])
-                year = int(parts[2])
 
-                # ถ้าเป็น ค.ศ. (เลขน้อยกว่า 2500) ให้บวก 543 ทันที
-                if year < 2500:
-                    year += 543
+            # If input is only a 4-digit year (e.g., 2026 or 2569)
+            if len(parts) == 1 and len(parts[0]) == 4:
+                year = int(parts[0])
+                if year < 2500: year += 543
+                due_date = str(year)
 
+            # If input is Month/Year (e.g., 3/2026)
+            elif len(parts) == 2:
+                month, year = int(parts[0]), int(parts[1])
+                if year < 2500: year += 543
+                due_date = f"{month:02d}/{year}"
+
+            # If input is full Day/Month/Year (e.g., 16/3/2026)
+            elif len(parts) == 3:
+                day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+                if year < 2500: year += 543
                 due_date = f"{day:02d}/{month:02d}/{year}"
         except Exception:
             pass
-        query["due_date"] = due_date
+
+        # 🔥 Use Regex for Partial Match searching
+        query["due_date"] = {"$regex": due_date, "$options": "i"}
 
     if subject:
-        # Use regex for partial matching
+        # Use regex for partial matching on subjects too
         query["subject"] = {"$regex": subject, "$options": "i"}
 
     cursor = hw_collection.find(query).sort("id", 1)
@@ -434,28 +442,34 @@ async def reminder_add(interaction: discord.Interaction, name: str, start_date: 
 async def reminder_list(interaction: discord.Interaction, target_date: str = None):
     # Build query dictionary for MongoDB
     query = {}
+
     if target_date:
-        # 🟢 แปลงฟอร์แมตวันที่ให้มีเลข 0 นำหน้าเสมอ (Data Normalization)
-        # ตัวอย่าง: แปลง 16/3/2569 หรือ 1/1/2569 ให้กลายเป็น 16/03/2569 และ 01/01/2569 อัตโนมัติ
+        # 🟢 Flexible date parser (Supports Year, Month/Year, or Day/Month/Year)
         try:
-            # parts = target_date.split('/')
-            # if len(parts) == 3:
-            #     # {int(parts[0]):02d} คือการบังคับให้เลขมี 2 หลัก ถ้าเป็น 3 จะกลายเป็น 03
-            #     target_date = f"{int(parts[0]):02d}/{int(parts[1]):02d}/{parts[2]}"
             parts = target_date.split('/')
-            if len(parts) == 3:
-                day = int(parts[0])
-                month = int(parts[1])
-                year = int(parts[2])
 
-                # ถ้าเป็น ค.ศ. (เลขน้อยกว่า 2500) ให้บวก 543 ทันที
-                if year < 2500:
-                    year += 543
+            # If input is only a 4-digit year (e.g., 2026 or 2569)
+            if len(parts) == 1 and len(parts[0]) == 4:
+                year = int(parts[0])
+                if year < 2500: year += 543
+                target_date = str(year)
 
+            # If input is Month/Year (e.g., 3/2026)
+            elif len(parts) == 2:
+                month, year = int(parts[0]), int(parts[1])
+                if year < 2500: year += 543
+                target_date = f"{month:02d}/{year}"
+
+            # If input is full Day/Month/Year (e.g., 16/3/2026)
+            elif len(parts) == 3:
+                day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+                if year < 2500: year += 543
                 target_date = f"{day:02d}/{month:02d}/{year}"
         except Exception:
             pass
-        query["start_date"] = target_date
+
+        # 🔥 Use Regex for Partial Match searching
+        query["start_date"] = {"$regex": target_date, "$options": "i"}
 
     cursor = reminder_collection.find(query).sort("id", 1)
     reminders = await cursor.to_list(length=100)
@@ -463,13 +477,13 @@ async def reminder_list(interaction: discord.Interaction, target_date: str = Non
     if not reminders:
         msg = "✨ **ไม่มีกิจกรรมหรือการแจ้งเตือนค้างอยู่ครับ!**"
         if target_date:
-            msg = f"🔍 **ไม่พบกิจกรรมในวันที่ {target_date} ครับ**"
+            msg = f"🔍 **ไม่พบกิจกรรมในวันที่ค้นหาครับ**"
         await interaction.response.send_message(msg)
         return
 
     msg = "📅 **รายการแจ้งเตือน / กิจกรรมทั้งหมด:**\n"
     if target_date:
-        msg = f"📅 **รายการกิจกรรมสำหรับวันที่ {target_date}:**\n"
+        msg = f"📅 **ผลการค้นหากิจกรรม:**\n"
 
     for rmd in reminders:
         s_time = rmd.get("start_time", "08:00")
