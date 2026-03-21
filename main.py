@@ -708,6 +708,49 @@ async def cs_download(interaction: discord.Interaction, file_size_mb: float, spe
     )
     await interaction.response.send_message(msg)
 
+@bot.tree.command(name="cs_grade", description="คำนวณเกรดจากคะแนนดิบ (อิงเกณฑ์ RMUTTO)")
+async def cs_grade(interaction: discord.Interaction, score: float):
+    if score < 0 or score > 100:
+        await interaction.response.send_message("❌ คะแนนต้องอยู่ระหว่าง 0 - 100 ครับ", ephemeral=True)
+        return
+        
+    grade = comsci_tools.calculate_grade(score)
+    msg = (
+        f"🎓 **ระบบคำนวณเกรด RMUTTO**\n"
+        f"📝 คะแนนของคุณ: **{score}**\n"
+        f"🌟 เกรดที่ได้คือ: **{grade}**"
+    )
+    await interaction.response.send_message(msg)
+
+@bot.tree.command(name="cs_gpa", description="คำนวณเกรดเฉลี่ย (พิมพ์ เกรด,หน่วยกิต เว้นวรรค เช่น 4,3 3.5,3)")
+async def cs_gpa(interaction: discord.Interaction, grades_data: str):
+    try:
+        # ระบบแปลงข้อความ เช่น "4,3 3.5,3" ให้กลายเป็น List ที่แพ็กเกจเราเข้าใจ
+        grade_list = []
+        for item in grades_data.split():
+            g, c = item.split(',')
+            grade_list.append((float(g), float(c)))
+        
+        gpa = comsci_tools.gpa_calculator(grade_list)
+        
+        # คำนวณหน่วยกิตรวม
+        total_credits = sum(c for g, c in grade_list)
+        
+        msg = (
+            f"📊 **ระบบคำนวณเกรดเฉลี่ย (GPA)**\n"
+            f"📚 ลงเรียนทั้งหมด: **{total_credits} หน่วยกิต**\n"
+            f"🎯 เกรดเฉลี่ยของคุณคือ: **{gpa}**"
+        )
+        await interaction.response.send_message(msg)
+        
+    except Exception:
+        msg = (
+            "❌ **รูปแบบผิดพลาด!**\n"
+            "กรุณาพิมพ์ในรูปแบบ `เกรด,หน่วยกิต` แล้วเว้นวรรคแต่ละวิชา\n"
+            "👉 **ตัวอย่าง:** `4,3 3.5,3 3,3` (แปลว่าได้ A 3กิต, B+ 3กิต, B 3กิต)"
+        )
+        await interaction.response.send_message(msg, ephemeral=True)
+
 # ==========================================
 # Execute Bot
 # ==========================================
