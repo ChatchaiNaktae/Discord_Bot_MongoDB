@@ -6,6 +6,8 @@ import os
 import aiohttp
 import random
 import certifi
+import chai_gacha
+import comsci_tools
 from dotenv import load_dotenv
 
 # นำเข้าเครื่องมือสำหรับเชื่อมต่อ MongoDB (แบบ Async)
@@ -638,6 +640,72 @@ async def randomday(interaction: discord.Interaction):
         "🎮 **เกมเมอร์โหมด**: ปิดโหมด Dev ทิ้งไป วันนี้ขอจับจอยลุยเล่นเกมให้หนำใจยาวๆ!"
     ]
     msg = f"🎲 **ตู้กาชาสุ่มกิจกรรมวันว่างทำงานแล้ว!** 🎲\n🎉 วันนี้บอทขอเสนอให้ชัย... \n\n👉 {random.choice(activities)}"
+    await interaction.response.send_message(msg)
+
+# ==========================================
+# Slash Commands: Chai Gacha Tools (Custom Package)
+# ==========================================
+
+@bot.tree.command(name="gacha_plan", description="คำนวณจำนวนโรลที่กดได้จากเพชรที่มี (Gacha Currency Planner)")
+async def gacha_plan(interaction: discord.Interaction, gems: int, cost_per_pull: int = 160):
+    pulls = chai_gacha.convert_currency_to_pulls(gems, cost_per_pull)
+    msg = (
+        f"💎 **Gacha Planner**\n"
+        f"เพชรที่มี: {gems} 💎\n"
+        f"คุณสามารถกดสุ่มได้: **{pulls} โรล** 🎫 (ใช้ตู้ละ {cost_per_pull} เพชร)"
+    )
+    await interaction.response.send_message(msg)
+
+@bot.tree.command(name="gacha_rate", description="เช็คเรทกาชา ณ โรลปัจจุบัน (รวมระบบ Soft Pity)")
+async def gacha_rate(interaction: discord.Interaction, current_pull: int, base_rate: float = 0.006, soft_pity: int = 74, hard_pity: int = 90):
+    rate = chai_gacha.calculate_current_pull_rate(current_pull, base_rate, soft_pity, hard_pity)
+    msg = (
+        f"🎰 **Gacha Rate Checker**\n"
+        f"โรลที่: {current_pull}\n"
+        f"โอกาสออกตัวหน้าตู้ตอนนี้คือ: **{rate}%** 🌟"
+    )
+    await interaction.response.send_message(msg)
+
+# ==========================================
+# Slash Commands: ComSci Tools (Custom Package)
+# ==========================================
+@bot.tree.command(name="cs_base", description="แปลงเลขฐาน 10 เป็นฐาน 2 และฐาน 16 (วิชา Digital)")
+async def cs_base(interaction: discord.Interaction, number: int):
+    binary = comsci_tools.dec_to_bin(number)
+    hexa = comsci_tools.dec_to_hex(number)
+    msg = (
+        f"🔢 **Base Converter (Digital Logic)**\n"
+        f"เลขฐาน 10: **{number}**\n"
+        f"🟢 ฐาน 2 (Binary): `{binary}`\n"
+        f"🔴 ฐาน 16 (Hex): `{hexa}`"
+    )
+    await interaction.response.send_message(msg)
+
+@bot.tree.command(name="cs_password", description="สุ่มรหัสผ่านสุดปลอดภัย (ส่งให้แบบส่วนตัว)")
+async def cs_password(interaction: discord.Interaction, length: int = 12):
+    if length < 4 or length > 100:
+        await interaction.response.send_message("❌ ความยาวต้องอยู่ระหว่าง 4-100 ตัวอักษรครับ", ephemeral=True)
+        return
+        
+    password = comsci_tools.generate_password(length)
+    msg = (
+        f"🔐 **รหัสผ่านที่สุ่มได้ ({length} ตัวอักษร):**\n"
+        f"`{password}`\n"
+        f"*(ข้อความนี้เห็นแค่คุณคนเดียวเท่านั้น)*"
+    )
+    # ephemeral=True ทำให้ข้อความโชว์แค่คนที่กดสั่งคำสั่งนี้ คนอื่นในเซิร์ฟเวอร์จะมองไม่เห็นครับ
+    await interaction.response.send_message(msg, ephemeral=True)
+    
+@bot.tree.command(name="cs_download", description="คำนวณเวลาดาวน์โหลดไฟล์ (Network & Storage)")
+async def cs_download(interaction: discord.Interaction, file_size_mb: float, speed_mbps: float):
+    time_sec = comsci_tools.calculate_download_time(file_size_mb, speed_mbps)
+    time_fmt = comsci_tools.format_seconds(int(time_sec))
+    msg = (
+        f"⏱️ **Download Time Calculator**\n"
+        f"📦 ขนาดไฟล์: {file_size_mb} MB\n"
+        f"🚀 ความเร็วเน็ต: {speed_mbps} Mbps\n"
+        f"⏳ ใช้เวลาโหลดประมาณ: **{time_sec} วินาที** ({time_fmt})"
+    )
     await interaction.response.send_message(msg)
 
 # ==========================================
